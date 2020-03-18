@@ -103,7 +103,7 @@ const svg = d3
     .on('click', () => focusOn()); // Reset zoom on canvas click
 
 d3.json(
-    'https://gist.githubusercontent.com/mbostock/4348373/raw/85f18ac90409caa5529b32156aa6e71cf985263f/flare.json',
+    'flare.json',
     (error, root) => {
         if (error) throw error;
 

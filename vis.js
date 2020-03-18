@@ -4,8 +4,7 @@ const width = window.innerWidth,
 
 const formatNumber = d3.format(',d');
 
-const x = d3
-    .scaleLinear()
+const x = d3.scaleLinear()
     .range([0, 2 * Math.PI])
     .clamp(true);
 
@@ -57,10 +56,23 @@ const lightGreenFirstPalette = palettes
     .map(d => d.reverse())
     .reduce((a, b) => a.concat(b));
 
+//颜色生成器
 const color = d3.scaleOrdinal(lightGreenFirstPalette);
 
+const color2 = d3.scaleLinear()
+    .domain([0,4000])
+    .range(["#6eeb34","#eb3434","#eb9934","#eb3434"])
+
+//为了后面把层次数据递归的生成旭日图或饼状图
 const partition = d3.partition();
 
+// 定义一个弧生成器
+    /*
+        x0:圆环开始角度
+        x1:圆环结束角度
+        y0:圆环内半径
+        y1:圆环外半径
+     */
 const arc = d3
     .arc()
     .startAngle(d => x(d.x0))
@@ -107,47 +119,64 @@ d3.json(
     (error, root) => {
         if (error) throw error;
 
-        root = d3.hierarchy(root);
-        root.sum(d => d.size);
+        root = d3.hierarchy(root); //从分层数据构造一个根节点，方便下面布局函数调用
+        console.log(root)
+        root.sum(d => d.size);  //依次生成所有后代节点的数组
 
-        const slice = svg.selectAll('g.slice').data(partition(root).descendants());
+        const slice = svg.selectAll('g.slice').data(partition(root).descendants()); //生成后代数组然后绑定到属性为slice的g上
+        console.log(partition(root).descendants())
 
-        slice.exit().remove();
+        slice.exit().remove(); //清除工作
 
         const newSlice = slice
             .enter()
             .append('g')
             .attr('class', 'slice')
             .on('click', d => {
-                d3.event.stopPropagation();
-                focusOn(d);
+                d3.event.stopPropagation();//阻止点击事件的传播
+                focusOn(d); //每一块都执行这个事件
             });
 
         newSlice
             .append('title')
-            .text(d => d.data.name + '\n' + formatNumber(d.value));
+            .text(d => d.data.name + '\n' + formatNumber(d.value)+'\n'); //鼠标悬停在上面时，显示的文字
 
         newSlice
             .append('path')
             .attr('class', 'main-arc')
-            .style('fill', d => color((d.children ? d : d.parent).data.name))
+            // .style('fill', d => color((d.children ? d.data.name : day_color(d)))) //每一块的颜色，我们最后一层的颜色，是随着时间的变化，随着值的不同，而不同的
+            .style("fill",d => d.children?color(d.data.name):color2(d.value))
+            //这个地方一定要选，而不是说，最后一层就跟前面一层颜色相同了
             .attr('d', arc);
 
+        function day_color(d){
+            //根据每个d值的不同而呈现不一样的颜色，做一个颜色变化范围的插值器就行了
+            var value = d.value,
+                tag = "";
+            if(value<1000)
+                tag =  "china";
+            else if(value > 1000 && value < 3000)
+                tag = "wuhan";
+            else
+                tag = "ll";
+            return tag;
+        }
+
         newSlice
-            .append('path')
+            .append('path') //跟下面那个结合绘制文字
             .attr('class', 'hidden-arc')
             .attr('id', (_, i) => `hiddenArc${i}`)
             .attr('d', middleArcLine);
 
         const text = newSlice
-            .append('text')
+            .append('text') //写入文字
             .attr('display', d => (textFits(d) ? null : 'none'));
 
-        // Add white contour
+        // 为文字增加白色轮廓
         text
             .append('textPath')
             .attr('startOffset', '50%')
-            .attr('xlink:href', (_, i) => `#hiddenArc${i}`)
+            .attr('xlink:href', (_, i) => `#hiddenArc${i}`) //
             .text(d => d.data.name)
             .style('fill', 'none')
             .style('stroke', '#E5E2E0')
@@ -162,8 +191,8 @@ d3.json(
     }
 );
 
-function focusOn(d = { x0: 0, x1: 1, y0: 0, y1: 1 }) {
-    // Reset to top-level if no data point specified
+function focusOn(d) {
+    // 如果未指定数据点，则重置为顶级
 
     const transition = svg
         .transition()
@@ -189,8 +218,22 @@ function focusOn(d = { x0: 0, x1: 1, y0: 0, y1: 1 }) {
 
     moveStackToFront(d);
 
-    //
+    //指定外围圆圈
+    if(d.depth == 2){
+        var circle = svg.append("g")
+            .attr("id",'circle')
+            .append("circle")
+            .attr("r",maxRadius)
+            .attr("fill","none")
+            .attr("stroke","black")
+            .attr("stroke-width",2)
+    }else
+        d3.select('#circle').remove();
 
+
+
+
+    //移动到前面显示的方法
     function moveStackToFront(elD) {
         svg
             .selectAll('.slice')
